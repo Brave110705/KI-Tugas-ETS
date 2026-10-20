@@ -70,3 +70,95 @@ def sub_bytes(state: list[list[int]]) -> None:
             state[r][c] = S_BOX[state[r][c]]
 
 
+def inv_sub_bytes(state: list[list[int]]) -> None:
+    for r in range(4):
+        for c in range(4):
+            state[r][c] = INV_S_BOX[state[r][c]]
+
+
+def shift_rows(state: list[list[int]]) -> None:
+    for r in range(1, 4):
+        state[r] = state[r][r:] + state[r][:r]
+
+
+def inv_shift_rows(state: list[list[int]]) -> None:
+    for r in range(1, 4):
+        state[r] = state[r][-r:] + state[r][:-r]
+
+
+def mix_columns(state: list[list[int]]) -> None:
+    for c in range(4):
+        s0, s1, s2, s3 = state[0][c], state[1][c], state[2][c], state[3][c]
+        state[0][c] = aes_utils.gmul(s0, 2) ^ aes_utils.gmul(s1, 3) ^ s2 ^ s3
+        state[1][c] = s0 ^ aes_utils.gmul(s1, 2) ^ aes_utils.gmul(s2, 3) ^ s3
+        state[2][c] = s0 ^ s1 ^ aes_utils.gmul(s2, 2) ^ aes_utils.gmul(s3, 3)
+        state[3][c] = aes_utils.gmul(s0, 3) ^ s1 ^ s2 ^ aes_utils.gmul(s3, 2)
+
+
+def inv_mix_columns(state: list[list[int]]) -> None:
+    for c in range(4):
+        s0, s1, s2, s3 = state[0][c], state[1][c], state[2][c], state[3][c]
+        state[0][c] = aes_utils.gmul(s0, 0x0E) ^ aes_utils.gmul(s1, 0x0B) ^ aes_utils.gmul(s2, 0x0D) ^ aes_utils.gmul(s3, 0x09)
+        state[1][c] = aes_utils.gmul(s0, 0x09) ^ aes_utils.gmul(s1, 0x0E) ^ aes_utils.gmul(s2, 0x0B) ^ aes_utils.gmul(s3, 0x0D)
+        state[2][c] = aes_utils.gmul(s0, 0x0D) ^ aes_utils.gmul(s1, 0x09) ^ aes_utils.gmul(s2, 0x0E) ^ aes_utils.gmul(s3, 0x0B)
+        state[3][c] = aes_utils.gmul(s0, 0x0B) ^ aes_utils.gmul(s1, 0x0D) ^ aes_utils.gmul(s2, 0x09) ^ aes_utils.gmul(s3, 0x0E)
+
+
+def encrypt_block(block_bytes: bytes, round_keys: list[list[list[int]]]) -> bytes:
+    state = aes_utils.bytes_to_matrix(block_bytes)
+    add_round_key(state, round_keys[0])
+
+    for rnd in range(1, 10):
+        sub_bytes(state)
+        shift_rows(state)
+        mix_columns(state)
+        add_round_key(state, round_keys[rnd])
+
+    sub_bytes(state)
+    shift_rows(state)
+    add_round_key(state, round_keys[10])
+    return aes_utils.matrix_to_bytes(state)
+
+
+def decrypt_block(block_bytes: bytes, round_keys: list[list[list[int]]]) -> bytes:
+    state = aes_utils.bytes_to_matrix(block_bytes)
+    add_round_key(state, round_keys[10])
+
+    for rnd in range(9, 0, -1):
+        inv_shift_rows(state)
+        inv_sub_bytes(state)
+        add_round_key(state, round_keys[rnd])
+        inv_mix_columns(state)
+
+    inv_shift_rows(state)
+    inv_sub_bytes(state)
+    add_round_key(state, round_keys[0])
+    return aes_utils.matrix_to_bytes(state)
+
+
+def encrypt_message(text: str, key_text: str) -> str:
+    key_bytes = aes_utils.normalize_key(key_text)
+    round_keys = key_expansion(key_bytes)
+    padded = aes_utils.pad(text.encode('utf-8'))
+
+    cipher_bytes = bytearray()
+    for i in range(0, len(padded), 16):
+        cipher_bytes.extend(encrypt_block(padded[i:i + 16], round_keys))
+    return cipher_bytes.hex()
+
+
+def decrypt_message(cipher_hex: str, key_text: str) -> str:
+    clean_hex = cipher_hex.strip()
+    if not clean_hex or len(clean_hex) % 32 != 0:
+        raise ValueError("Format ciphertext hex harus kelipatan 32 karakter (16 byte).")
+
+    cipher_bytes = bytes.fromhex(clean_hex)
+    key_bytes = aes_utils.normalize_key(key_text)
+    round_keys = key_expansion(key_bytes)
+
+    plain_padded = bytearray()
+    for i in range(0, len(cipher_bytes), 16):
+        plain_padded.extend(decrypt_block(cipher_bytes[i:i + 16], round_keys))
+    return aes_utils.unpad(bytes(plain_padded)).decode('utf-8')
+
+
