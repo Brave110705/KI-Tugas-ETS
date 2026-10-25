@@ -27,6 +27,21 @@ class AliceNode:
         self.lock = threading.Lock()
         self.running = True
 
+    def stop(self) -> None:
+        self.running = False
+        with self.lock:
+            sock = self.bob_sock
+            self.bob_sock = None
+        if sock:
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            try:
+                sock.close()
+            except OSError:
+                pass
+
     def request_kdc_session_key(self) -> tuple[str, str]:
         n1 = str(secrets.randbelow(900000) + 100000)
         req_step1 = f"{self.id_a}||{self.id_b}||{n1}"
@@ -252,13 +267,13 @@ def main() -> None:
                 except Exception as e:
                     print(f"[!] Handshake ulang (/rekey) gagal: {e}")
             elif msg == "/exit":
-                alice.running = False
+                alice.stop()
                 sys.exit(0)
             else:
                 alice.send_chat(msg)
         except (KeyboardInterrupt, EOFError):
             print("\n[*] Menutup Alice Node...")
-            alice.running = False
+            alice.stop()
             sys.exit(0)
         except Exception as e:
             print(f"[!] Error: {e}")

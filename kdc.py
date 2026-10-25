@@ -16,8 +16,21 @@ class KDCServer:
         self.ka = ka
         self.kb = kb
         self.custom_ks: str | None = None
+        self.server_sock: socket.socket | None = None
         self.lock = threading.Lock()
         self.running = True
+
+    def stop(self) -> None:
+        self.running = False
+        if self.server_sock:
+            try:
+                self.server_sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            try:
+                self.server_sock.close()
+            except OSError:
+                pass
 
     def generate_session_key(self) -> str:
         with self.lock:
@@ -79,6 +92,7 @@ class KDCServer:
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server.bind((self.host, self.port))
         server.listen(5)
+        self.server_sock = server
         print(f"[*] KDC Server aktif mendengarkan di {self.host}:{self.port}")
         while self.running:
             try:
@@ -141,13 +155,13 @@ def main() -> None:
                         kdc.custom_ks = None if val.lower() == "auto" else val
                     print(f"[*] Mode Session Key Ks diatur ke: {val}")
             elif cmd == "/exit":
-                kdc.running = False
+                kdc.stop()
                 sys.exit(0)
             else:
                 print("[!] Perintah: /keys | /setka <key> | /setkb <key> | /setks <key|auto> | /exit")
         except (KeyboardInterrupt, EOFError):
             print("\n[*] Menutup KDC Server...")
-            kdc.running = False
+            kdc.stop()
             sys.exit(0)
 
 

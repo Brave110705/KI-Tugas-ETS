@@ -20,10 +20,28 @@ class BobNode:
         self.pending_ks: str = ""
         self.expected_fn2: int | None = None
         self.alice_sock: socket.socket | None = None
+        self.server_sock: socket.socket | None = None
         self.auth_event = threading.Event()
         self.chat_ready = False
         self.lock = threading.Lock()
         self.running = True
+
+    def stop(self) -> None:
+        self.running = False
+        with self.lock:
+            socks = [self.alice_sock, self.server_sock]
+            self.alice_sock = None
+            self.server_sock = None
+        for s in socks:
+            if s:
+                try:
+                    s.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
+                try:
+                    s.close()
+                except OSError:
+                    pass
 
     def handle_incoming_line(self, line: str) -> None:
         if line.startswith("STEP3||"):
@@ -141,6 +159,7 @@ class BobNode:
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server.bind((self.host, self.port))
         server.listen(5)
+        self.server_sock = server
         print(f"[*] Responder Bob mendengarkan koneksi di {self.host}:{self.port}...")
         t = threading.Thread(target=self.accept_forever, args=(server,), daemon=True)
         t.start()
@@ -203,13 +222,13 @@ def main() -> None:
                 else:
                     print("[!] Kunci tidak valid.")
             elif msg == "/exit":
-                bob.running = False
+                bob.stop()
                 sys.exit(0)
             else:
                 bob.send_chat(msg)
         except (KeyboardInterrupt, EOFError):
             print("\n[*] Menutup Bob Node...")
-            bob.running = False
+            bob.stop()
             sys.exit(0)
         except Exception as e:
             print(f"[!] Error: {e}")

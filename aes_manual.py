@@ -162,3 +162,25 @@ def decrypt_message(cipher_hex: str, key_text: str) -> str:
     return aes_utils.unpad(bytes(plain_padded)).decode('utf-8')
 
 
+if __name__ == "__main__":
+    nist_key = bytes.fromhex("2b7e151628aed2a6abf7158809cf4f3c")
+    nist_plain = bytes.fromhex("3243f6a8885a308d313198a2e0370734")
+    nist_rk = key_expansion(nist_key)
+    nist_cipher = encrypt_block(nist_plain, nist_rk)
+    nist_dec = decrypt_block(nist_cipher, nist_rk)
+    print("==================================================")
+    print("=        PENGUJIAN ENGINE AES-128 MANUAL         =")
+    print("==================================================")
+    print(f"[NIST FIPS-197 CIPHER]: {nist_cipher.hex()}")
+    print(f"[NIST FIPS-197 STATUS]: {'VALID' if nist_dec == nist_plain else 'INVALID'}")
+    try:
+        pt = input("\nMasukkan Plaintext ASCII (default: Halo Keamanan Informasi!): ").strip() or "Halo Keamanan Informasi!"
+        ky = input("Masukkan Kunci ASCII (default: KUNCI_RAHASIA_16): ").strip() or "KUNCI_RAHASIA_16"
+        ct_hex = encrypt_message(pt, ky)
+        dt_txt = decrypt_message(ct_hex, ky)
+        print(f"[KEY 16-BYTE]         : {aes_utils.normalize_key(ky).decode('utf-8', errors='replace')}")
+        print(f"[CIPHERTEXT HEX]      : {ct_hex}")
+        print(f"[DECRYPTED PLAINTEXT] : {dt_txt}")
+    except (EOFError, KeyboardInterrupt):
+        print()
+
